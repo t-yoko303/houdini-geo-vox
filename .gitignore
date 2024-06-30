@@ -2,3 +2,5 @@ _bin
 _bin_xcode
 example/backup
 _build
+
+_build__/
