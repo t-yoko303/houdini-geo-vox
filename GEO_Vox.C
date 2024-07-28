@@ -21,6 +21,22 @@ const unsigned int GEO_Vox::s_vox_main = GEOVOX_MAKE_ID('M', 'A', 'I', 'N');
 const unsigned int GEO_Vox::s_vox_size = GEOVOX_MAKE_ID('S', 'I', 'Z', 'E');
 const unsigned int GEO_Vox::s_vox_xyzi = GEOVOX_MAKE_ID('X', 'Y', 'Z', 'I');
 const unsigned int GEO_Vox::s_vox_rgba = GEOVOX_MAKE_ID('R', 'G', 'B', 'A');
+const unsigned int GEO_Vox::s_vox_nTRN = GEOVOX_MAKE_ID('n', 'T', 'R', 'N');
+const unsigned int GEO_Vox::s_vox_nGRP = GEOVOX_MAKE_ID('n', 'G', 'R', 'P');
+const unsigned int GEO_Vox::s_vox_nSHP = GEOVOX_MAKE_ID('n', 'S', 'H', 'P');
+const unsigned int GEO_Vox::s_vox_MATL = GEOVOX_MAKE_ID('M', 'A', 'T', 'L');
+const unsigned int GEO_Vox::s_vox_rOBJ = GEOVOX_MAKE_ID('r', 'O', 'B', 'J');
+const unsigned int GEO_Vox::s_vox_rCAM = GEOVOX_MAKE_ID('r', 'C', 'A', 'M');
+const unsigned int GEO_Vox::s_vox_LAYR = GEOVOX_MAKE_ID('L', 'A', 'Y', 'R');
+const unsigned int GEO_Vox::s_vox_IMAP = GEOVOX_MAKE_ID('I', 'M', 'A', 'P');
+const unsigned int GEO_Vox::s_vox_NOTE = GEOVOX_MAKE_ID('N', 'O', 'T', 'E');
+
+
+
+
+
+
+
 
 const unsigned int GEO_Vox::s_vox_version = 150u;
 const unsigned int GEO_Vox::s_vox_palette_size = 256u;
@@ -217,9 +233,6 @@ GEO_Vox::fileLoad(GEO_Detail* detail, UT_IStream& stream, bool ate_magic)
     unsigned int vox_size_y = 0u;
     unsigned int vox_size_z = 0u;
 
-    UT_Array<GEO_VoxPaletteColor> vox_palette;
-    UT_Array<GEO_VoxVoxel> vox_voxels;
-
     // Reset bytes read.
     vox_child_bytes_read = 0u;
 
@@ -235,58 +248,23 @@ GEO_Vox::fileLoad(GEO_Detail* detail, UT_IStream& stream, bool ate_magic)
 
         if(GEO_Vox::s_vox_size == vox_chunk_child.chunk_id)
         {
-            if(stream.bread(&vox_size_x) != 1)
-            {
-                detail->clearAndDestroy();
-                return GA_Detail::IOStatus(false);
-            }
-
-            UTswap_int32(vox_size_x, vox_size_x);
-            vox_child_bytes_read += sizeof(unsigned int);
-
-            if(stream.bread(&vox_size_y) != 1)
-            {
-                detail->clearAndDestroy();
-                return GA_Detail::IOStatus(false);
-            }
-
-            UTswap_int32(vox_size_y, vox_size_y);
-            vox_child_bytes_read += sizeof(unsigned int);
-
-            if(stream.bread(&vox_size_z) != 1)
-            {
-                detail->clearAndDestroy();
-                return GA_Detail::IOStatus(false);
-            }
-
-            UTswap_int32(vox_size_z, vox_size_z);
-            vox_child_bytes_read += sizeof(unsigned int);
+            GEO_VoxSize size;
+            if(!ReadSize(stream, size, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+            vox_sizes.append(size);
         }
         else if(GEO_Vox::s_vox_xyzi == vox_chunk_child.chunk_id)
         {
-            unsigned int vox_voxel_count = 0u;
-
-            if(stream.bread(&vox_voxel_count) != 1)
-            {
-                detail->clearAndDestroy();
-                return GA_Detail::IOStatus(false);
-            }
-
-            UTswap_int32(vox_voxel_count, vox_voxel_count);
-            vox_child_bytes_read += sizeof(unsigned int);
-
-            vox_voxels.setSize(vox_voxel_count);
-            for(unsigned int idx = 0; idx < vox_voxel_count; ++idx)
-            {
-                GEO_VoxVoxel vox_voxel;
-                if(!ReadVoxel(stream, vox_voxel, vox_child_bytes_read))
-                {
-                    detail->clearAndDestroy();
-                    return GA_Detail::IOStatus(false);
-                }
-
-                vox_voxels(idx) = vox_voxel;
-            }
+            GEO_VoxModel model;
+            if(!ReadModel(stream, model, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+            vox_models.append(model);
         }
         else if(GEO_Vox::s_vox_rgba == vox_chunk_child.chunk_id)
         {
@@ -303,6 +281,86 @@ GEO_Vox::fileLoad(GEO_Detail* detail, UT_IStream& stream, bool ate_magic)
                 vox_palette(idx) = vox_palette_color;
             }
         }
+        else if (GEO_Vox::s_vox_nTRN == vox_chunk_child.chunk_id)
+        {
+            GEO_VoxNode node;
+			GEO_VoxTransform transform;
+			if (!ReadTransform(stream, node, transform, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+            node.transform_id = vox_transforms.size();
+            vox_nodes.append(node);
+            vox_transforms.append(transform);
+		}
+		else if (GEO_Vox::s_vox_nGRP == vox_chunk_child.chunk_id)
+		{
+			GEO_VoxNode node;
+			GEO_VoxGroup group;
+			if (!ReadGroup(stream, node, group, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+            node.group_id = vox_groups.size();
+            vox_nodes.append(node);
+            vox_groups.append(group);
+
+		}
+		else if (GEO_Vox::s_vox_nSHP == vox_chunk_child.chunk_id)
+		{
+			GEO_VoxNode node;
+			GEO_VoxShape shape;
+			if (!ReadShape(stream, node, shape, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+            node.shape_id = vox_shapes.size();
+			vox_nodes.append(node);
+			vox_shapes.append(shape);
+		}
+		else if (GEO_Vox::s_vox_MATL == vox_chunk_child.chunk_id)
+		{
+			GEO_VoxMaterial material;
+			if (!ReadMaterial(stream, material, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+		}
+		else if (GEO_Vox::s_vox_rOBJ == vox_chunk_child.chunk_id)
+		{
+            GEO_VoxObj renderObject;
+			if (!ReadObject(stream, renderObject, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+		}
+		else if (GEO_Vox::s_vox_rCAM == vox_chunk_child.chunk_id)
+		{
+			GEO_VoxCam renderCamera;
+			if (!ReadCamera(stream, renderCamera, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+		}
+		else if (GEO_Vox::s_vox_LAYR == vox_chunk_child.chunk_id)
+		{
+			GEO_VoxLayer layer;
+			if (!ReadLayer(stream, layer, vox_child_bytes_read))
+			{
+				detail->clearAndDestroy();
+				return GA_Detail::IOStatus(false);
+			}
+		}
+		else if (GEO_Vox::s_vox_IMAP == vox_chunk_child.chunk_id)
+		{
+        }
+
         else
         {
             // We don't know this chunk, skip content in addition to skipping children.
@@ -340,44 +398,11 @@ GEO_Vox::fileLoad(GEO_Detail* detail, UT_IStream& stream, bool ate_magic)
         }
     }
 
-    detail->addStringTuple(GA_ATTRIB_PRIMITIVE, "name", 1);
-    GA_RWHandleS name_attrib(detail->findPrimitiveAttribute("name"));
-
-    UT_Matrix3 xform;
-    xform.identity();
-
-#ifdef GEOVOX_SWAP_HOUDINI_AXIS
-    xform.scale(vox_size_x * 0.5f, vox_size_z * 0.5f, vox_size_y * 0.5f);
-#else
-    xform.scale(vox_size_x * 0.5f, vox_size_y * 0.5f, vox_size_z * 0.5f);
-#endif
-
-    GU_PrimVolume* volume = (GU_PrimVolume*) GU_PrimVolume::build((GU_Detail*) detail);
-    volume->setTransform(xform);
-    name_attrib.set(volume->getMapOffset(), GEOVOX_VOLUME_NAME);
-
-    UT_VoxelArrayWriteHandleF handle = volume->getVoxelWriteHandle();
-
-#ifdef GEOVOX_SWAP_HOUDINI_AXIS
-    handle->size(vox_size_x, vox_size_z, vox_size_y);
-#else
-    handle->size(vox_size_x, vox_size_y, vox_size_z);
-#endif
-
-    for(unsigned int idx_vox = 0, vox_entries = vox_voxels.entries(); idx_vox < vox_entries; ++idx_vox)
-    {
-        GEO_VoxVoxel vox_voxel = vox_voxels(idx_vox);
-        const GEO_VoxPaletteColor& vox_palette_color = vox_palette(vox_voxel.palette_index);
-
-        if(!IsPaletteColorEmpty(vox_palette_color))
-        {
-#ifdef GEOVOX_SWAP_HOUDINI_AXIS
-            handle->setValue(vox_voxel.x, vox_voxel.z, vox_voxel.y, (float) vox_voxel.palette_index);
-#else
-            handle->setValue(vox_voxel.x, vox_voxel.y, vox_voxel.z, (float) vox_voxel.palette_index);
-#endif
-        }
-    }
+    if(!TraverseNodes(vox_nodes(0), gu_detail, nullptr))
+	{
+		detail->clearAndDestroy();
+		return GA_Detail::IOStatus(false);
+	}
 
     return GA_Detail::IOStatus(true);
 }
@@ -516,4 +541,462 @@ GEO_Vox::ReadVoxel(UT_IStream& stream, GEO_VoxVoxel& vox_voxel, unsigned int& by
     bytes_read += sizeof(unsigned char);
 
     return true;
+}
+
+
+//! Read size.
+bool GEO_Vox::ReadSize(UT_IStream& stream, GEO_VoxSize& size, unsigned int& bytes_read)
+{
+    if(!ReadInt(stream, size.x, bytes_read))
+	{
+		return false;
+	}
+
+	if(!ReadInt(stream, size.y, bytes_read))
+	{
+		return false;
+	}
+
+	if(!ReadInt(stream, size.z, bytes_read))
+	{
+		return false;
+	}
+
+	return true;
+
+}
+//! Read a model.
+bool GEO_Vox::ReadModel(UT_IStream& stream, GEO_VoxModel& model, unsigned int& bytes_read)
+{
+	int num_of_voxels;
+	if(!ReadInt(stream, num_of_voxels, bytes_read))
+	{
+		return false;
+	}
+	for (int idx = 0; idx < num_of_voxels; ++idx)
+	{
+		GEO_VoxVoxel voxel;
+		if(!ReadVoxel(stream, voxel, bytes_read))
+		{
+			return false;
+		}
+		model.voxels.append(voxel);
+	}
+	return true;
+}
+
+
+//! Read Transform
+bool GEO_Vox::ReadTransform(UT_IStream& stream, GEO_VoxNode& node, GEO_VoxTransform& transform, unsigned int& bytes_read)
+{
+    if(!ReadInt(stream, node.node_id, bytes_read))
+    {
+        return false;
+	}
+
+    if(!ReadDictionary(stream, transform.attributes, bytes_read))
+	{
+		return false;
+    }
+    int child_node_id = -1;
+	if(!ReadInt(stream, child_node_id, bytes_read))
+        {
+		return false;
+	}
+    node.children.append(child_node_id);
+
+    int reserved;
+    if(!ReadInt(stream, reserved, bytes_read))
+	{
+		return false;
+	}
+    
+    if (!ReadInt(stream, transform.layer_id, bytes_read))
+    {
+        return false;
+    }
+    int num_of_frames;
+    if (!ReadInt(stream, num_of_frames, bytes_read))
+	{
+		return false;
+	}
+    for (int idx = 0; idx < num_of_frames; ++idx)
+    {
+        GEO_VoxFrame frame;
+        GEO_VoxDictionary frameAttributes;
+        if (!ReadDictionary(stream, frameAttributes, bytes_read)) {
+            return false;
+        }
+
+        frame.x = GetValueFromDictionary<int>(frameAttributes, "_t", 0);
+        frame.y = GetValueFromDictionary<int>(frameAttributes, "_t", 1);
+        frame.z = GetValueFromDictionary<int>(frameAttributes, "_t", 2);
+        frame.rotation = GetValueFromDictionary<unsigned char>(frameAttributes, "_r", 0);
+
+        transform.frames.append(frame);
+    }
+	return true;
+
+}
+
+//! Read Shape
+bool GEO_Vox::ReadShape(UT_IStream& stream, GEO_VoxNode& node, GEO_VoxShape& shape, unsigned int& bytes_read)
+{
+    if(!ReadInt(stream, node.node_id, bytes_read))
+	{
+		return false;
+	}
+    
+	if(!ReadDictionary(stream, shape.attributes, bytes_read))
+	{
+		return false;
+	}
+    int num_of_models;
+	if(!ReadInt(stream, num_of_models, bytes_read))
+	{
+		return false;
+	}
+    for (int idx = 0; idx < num_of_models; ++idx)
+    {
+        GEO_VoxModelReference model_reference;
+        if(!ReadModelReference(stream, model_reference, bytes_read))
+		{
+			return false;
+		}
+        shape.models.append(model_reference);
+    }
+    return true;
+}
+//! Read ModelReference
+bool GEO_Vox::ReadModelReference(UT_IStream& stream, GEO_VoxModelReference& modelReference, unsigned int& bytes_read)
+{
+    if(!ReadInt(stream, modelReference.model_id, bytes_read))
+	{
+		return false;
+	}
+    if(!ReadDictionary(stream, modelReference.attributes, bytes_read))
+    {
+        return false;
+	}
+    return true;
+}
+
+//! Read Group
+bool GEO_Vox::ReadGroup(UT_IStream& stream, GEO_VoxNode& node, GEO_VoxGroup& group, unsigned int& bytes_read) {
+	if(!ReadInt(stream, node.node_id, bytes_read))
+	{
+		return false;
+	}
+    
+    if(!ReadDictionary(stream, group.attributes, bytes_read)) {
+        return false;
+	}
+
+    int num_children = 0;
+    if (!ReadInt(stream, num_children, bytes_read))
+    {
+        return false;
+    }
+    for(int idx = 0; idx < num_children; ++idx)
+	{
+        int child = -1;
+        if (!ReadInt(stream, child, bytes_read))
+        {
+            return false;
+        }
+        node.children.append(child);
+	}
+    return true;
+}
+
+
+//! Read Layer
+bool GEO_Vox::ReadLayer(UT_IStream& stream, GEO_VoxLayer& layer, unsigned int& bytes_read)
+{
+    if(!ReadInt(stream, layer.layer_id, bytes_read))
+	{
+		return false;
+	}
+	
+	if(!ReadDictionary(stream, layer.attributes, bytes_read))
+	{
+		return false;
+	}
+    int reserved;
+    if(!ReadInt(stream, reserved, bytes_read))
+    {
+        return false;
+	}
+	return true;
+}
+//! Read Material
+bool GEO_Vox::ReadMaterial(UT_IStream& stream, GEO_VoxMaterial& material, unsigned int& bytes_read)
+{
+    if (!ReadInt(stream, material.material_id, bytes_read))
+    {
+        return false;
+    }
+
+    if(!ReadDictionary(stream, material.attributes, bytes_read))
+	{
+		return false;
+	}
+	return true;
+}
+
+//! Read Object
+bool GEO_Vox::ReadObject(UT_IStream& stream, GEO_VoxObj& obj, unsigned int& bytes_read)
+{
+    if(!ReadDictionary(stream, obj.renderring_attributes, bytes_read))
+    {
+        return false;
+	}
+    return true;
+}
+//! Read Camera
+bool GEO_Vox::ReadCamera(UT_IStream& stream, GEO_VoxCam& cam, unsigned int& bytes_read)
+{
+    if (!ReadInt(stream, cam.camera_id, bytes_read))
+    {
+        return false;
+    }
+
+    if(!ReadDictionary(stream, cam.attributes, bytes_read))
+	{
+		return false;
+	}
+	return true;
+}
+
+//! Read Note
+bool GEO_Vox::ReadNote(UT_IStream& stream, GEO_VoxNote& note, unsigned int& bytes_read) 
+{
+    int num_names;
+    if(!ReadInt(stream, num_names, bytes_read))
+        {
+		return false;
+	}
+    for(int idx = 0; idx < num_names; ++idx)
+	{
+		UT_String color_name;
+		if(!ReadString(stream, color_name, bytes_read))
+		{
+			return false;
+		}
+		note.color_names.append(color_name);
+	}
+
+}
+//! Read IMap
+bool GEO_Vox::ReadIMap(UT_IStream& stream, GEO_VoxIMap& imap, unsigned int& bytes_read) 
+{
+    // not implemeted
+    return true;
+}
+
+
+
+
+//! Read Dictionary
+bool GEO_Vox::ReadDictionary(UT_IStream& stream, GEO_VoxDictionary& dictionary, unsigned int& bytes_read) {
+    int num_entries = 0;
+	if(!ReadInt(stream, num_entries, bytes_read))
+	{
+		return false;
+	}
+	for(int idx = 0; idx < num_entries; ++idx)
+	{
+        GEO_VoxKeyValuePair entry;
+		if(!ReadString(stream, entry.key, bytes_read))
+		{
+			return false;
+		}
+		if(!ReadString(stream, entry.value, bytes_read))
+		{
+			return false;
+		}
+		dictionary.entries.append(entry);
+	}
+	return true;
+}
+
+
+//! Read a string.
+bool GEO_Vox::ReadString(UT_IStream& stream, UT_String& value, unsigned int& bytes_read) {
+    int length = 0;
+	if(!ReadInt(stream, length, bytes_read))
+	{
+		return false;
+	}
+	if(length < 0)
+	{
+		return false;
+	}
+	char* buffer = new char[length+1];
+	if(stream.bread(buffer, length) != length)
+	{
+		delete[] buffer;
+		return false;
+	}
+    buffer[length] = '\0';
+
+    UT_String newStr(UT_String::ALWAYS_DEEP, buffer);
+
+	value = newStr;
+	delete[] buffer;
+	bytes_read += length;
+	return true;
+}
+
+
+//! Read a 32-bit integer.
+bool GEO_Vox::ReadInt(UT_IStream& stream, int& value, unsigned int& bytes_read) {
+    if(stream.bread(&value) != 1)
+	{
+		return false;
+	}
+	UTswap_int32(value, value);
+	bytes_read += sizeof(int);
+	return true;
+}
+
+
+
+//! Get string from dictionary.
+UT_String GEO_Vox::GetDictionaryString(const GEO_VoxDictionary& dictionary, const UT_String& key) const
+{
+    UT_String value;
+	for(int idx = 0; idx < dictionary.entries.size(); ++idx)
+	{
+		if(key == dictionary.entries(idx).key)
+		{
+			value = dictionary.entries(idx).value;
+			break;
+		}
+	}
+	return value;
+}
+
+template <typename T> T GEO_Vox::GetValueFromDictionary(const GEO_VoxDictionary& value, const UT_String& key, int index) const
+{
+    T result;
+	UT_String valueStr = GetDictionaryString(value, key);
+	if(valueStr.length() > 0)
+	{
+		UT_StringArray values;
+		valueStr.tokenize(values, " ");
+		if(values.size() > index)
+		{
+            if (std::is_same<T, int>::value)
+			{
+				result = values(index).toInt();
+			}
+			else if (std::is_same<T, float>::value)
+			{
+				result = values(index).toFloat();
+            }
+            else {
+                result = values(index).toInt();
+            }
+		}
+	}
+	return result;
+
+
+}
+
+
+
+
+//! Traverse node hierarchy.
+bool GEO_Vox::TraverseNodes(GEO_VoxNode& node, GEO_Detail* detail, GU_PrimVolume* volume)
+{
+    if (node.transform_id >= 0 && node.transform_id < vox_transforms.size())
+    {
+        GEO_VoxTransform& transform = vox_transforms(node.transform_id);
+        volume = (GU_PrimVolume*)GU_PrimVolume::build((GU_Detail*)detail);
+        int frameIdx = 0;
+		if(frameIdx < transform.frames.size())
+		{
+
+			GEO_VoxFrame& frame = transform.frames(frameIdx);
+            UT_Matrix3 matrix;
+            matrix.identity();
+
+            volume->setTransform(matrix);
+		}
+        UT_String name = GetDictionaryString(transform.attributes, "_name");
+        if(name.length() > 0) {
+            detail->addStringTuple(GA_ATTRIB_PRIMITIVE, "group_name", 1);
+            GA_RWHandleS group_name_attrib(detail->findPrimitiveAttribute("group_name"));
+            group_name_attrib.set(volume->getMapOffset(), name);
+        }
+    }
+    else if (node.group_id >= 0) {
+        GEO_VoxGroup& group = vox_groups(node.group_id);
+    }
+    else if (node.shape_id >= 0 && node.shape_id < vox_shapes.size()) {
+
+
+        GEO_VoxShape& shape = vox_shapes(node.shape_id);
+        for (int idx = 0; idx < shape.models.size(); ++idx)
+        {
+            GEO_VoxModelReference& model_reference = shape.models(idx);
+            if (model_reference.model_id >= 0 && model_reference.model_id < vox_models.size() && model_reference.model_id < vox_sizes.size())
+            {
+                GEO_VoxSize& size = vox_sizes(model_reference.model_id);
+                UT_Matrix3 matrix = volume->getTransform();
+#ifdef GEOVOX_SWAP_HOUDINI_AXIS
+                matrix.scale(size.x * 0.5f, size.z * 0.5f, size.y * 0.5f);
+#else
+                matrix.scale(size.x * 0.5f, size.y * 0.5f, size.z * 0.5f);
+#endif
+                volume->setTransform(matrix);
+
+                detail->addStringTuple(GA_ATTRIB_PRIMITIVE, "name", 1);
+                GA_RWHandleS name_attrib(detail->findPrimitiveAttribute("name"));
+                name_attrib.set(volume->getMapOffset(), GEOVOX_VOLUME_NAME);
+
+                UT_VoxelArrayWriteHandleF handle = volume->getVoxelWriteHandle();
+
+#ifdef GEOVOX_SWAP_HOUDINI_AXIS
+                handle->size(size.x, size.z, size.y);
+#else
+                handle->size(size.x, size.y, size.z);
+#endif
+
+                GEO_VoxModel& model = vox_models(model_reference.model_id);
+                for (unsigned int idx_vox = 0, vox_entries = model.voxels.entries(); idx_vox < vox_entries; ++idx_vox)
+                {
+                    GEO_VoxVoxel vox_voxel = model.voxels(idx_vox);
+                    const GEO_VoxPaletteColor& vox_palette_color = vox_palette(vox_voxel.palette_index);
+
+                    if (!IsPaletteColorEmpty(vox_palette_color))
+                    {
+#ifdef GEOVOX_SWAP_HOUDINI_AXIS
+                        handle->setValue(vox_voxel.x, vox_voxel.z, vox_voxel.y, (float)vox_voxel.palette_index);
+#else
+                        handle->setValue(vox_voxel.x, vox_voxel.y, vox_voxel.z, (float)vox_voxel.palette_index);
+#endif
+                    }
+                }
+            }
+        }
+    }
+
+    for(int idx = 0; idx < node.children.size(); ++idx)
+	{
+        int child_id = node.children(idx);
+		if(child_id < 0 || child_id >= vox_nodes.size())
+		{
+			return true;
+		}
+
+        GEO_VoxNode& child = vox_nodes(child_id);
+		if(!TraverseNodes(child, detail, volume))
+		{
+			return false;
+		}
+	}
+	return true;
 }
