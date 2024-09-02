@@ -924,13 +924,18 @@ bool GEO_Vox::TraverseNodes(GEO_VoxNode& node, GEO_Detail* detail, GU_PrimVolume
             matrix.identity();
 
             volume->setTransform(matrix);
+
+#ifdef GEOVOX_SWAP_HOUDINI_AXIS
+            UT_Vector3 vec(frame.x, frame.z, frame.y);
+#else
+            UT_Vector3 vec(frame.x, frame.y, frame.z);
+#endif
+            volume->setPos3(vec);
 		}
         UT_String name = GetDictionaryString(transform.attributes, "_name");
-        if(name.length() > 0) {
-            detail->addStringTuple(GA_ATTRIB_PRIMITIVE, "group_name", 1);
-            GA_RWHandleS group_name_attrib(detail->findPrimitiveAttribute("group_name"));
-            group_name_attrib.set(volume->getMapOffset(), name);
-        }
+        detail->addStringTuple(GA_ATTRIB_PRIMITIVE, "group_name", 1);
+        GA_RWHandleS group_name_attrib(detail->findPrimitiveAttribute("group_name"));
+        group_name_attrib.set(volume->getMapOffset(), name);
     }
     else if (node.group_id >= 0) {
         GEO_VoxGroup& group = vox_groups(node.group_id);
@@ -953,9 +958,11 @@ bool GEO_Vox::TraverseNodes(GEO_VoxNode& node, GEO_Detail* detail, GU_PrimVolume
 #endif
                 volume->setTransform(matrix);
 
+                /*
                 detail->addStringTuple(GA_ATTRIB_PRIMITIVE, "name", 1);
                 GA_RWHandleS name_attrib(detail->findPrimitiveAttribute("name"));
                 name_attrib.set(volume->getMapOffset(), GEOVOX_VOLUME_NAME);
+                */
 
                 UT_VoxelArrayWriteHandleF handle = volume->getVoxelWriteHandle();
 
